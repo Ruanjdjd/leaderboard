@@ -23,6 +23,7 @@ function formatNumber(n) {
   return num.toLocaleString("pt-BR");
 }
 
+// BDFD retorna "Nome - Valor" — extrai só o nome
 function parseName(raw) {
   if (!raw) return "";
   const idx = raw.lastIndexOf(" - ");
@@ -46,7 +47,7 @@ function drawRoundedAvatar(ctx, img, cx, cy, radius) {
 }
 
 async function tryLoadAvatar(userId) {
-  if (!userId) return null;
+  if (!userId || userId === "0") return null;
   const urls = [
     `https://cdn.discordapp.com/avatars/${userId}/avatar.png?size=128`,
     `https://cdn.discordapp.com/embed/avatars/${parseInt(userId) % 5}.png`,
@@ -57,22 +58,29 @@ async function tryLoadAvatar(userId) {
   return null;
 }
 
-app.get("/leaderboard", async (req, res) => {
+// Rota: /lb/nome1/valor1/id1/nome2/valor2/id2/.../nome5/valor5/id5
+app.get("/lb/:u1/:v1/:id1/:u2/:v2/:id2/:u3/:v3/:id3/:u4/:v4/:id4/:u5/:v5/:id5", async (req, res) => {
   try {
+    const { u1,v1,id1, u2,v2,id2, u3,v3,id3, u4,v4,id4, u5,v5,id5 } = req.params;
+    const users = [
+      { name: parseName(decodeURIComponent(u1)), value: v1, id: id1 },
+      { name: parseName(decodeURIComponent(u2)), value: v2, id: id2 },
+      { name: parseName(decodeURIComponent(u3)), value: v3, id: id3 },
+      { name: parseName(decodeURIComponent(u4)), value: v4, id: id4 },
+      { name: parseName(decodeURIComponent(u5)), value: v5, id: id5 },
+    ];
+
     const bg = await loadImage(path.join(__dirname, "bg.png"));
     const canvas = createCanvas(bg.width, bg.height);
     const ctx = canvas.getContext("2d");
-
     ctx.drawImage(bg, 0, 0);
 
-    for (let i = 1; i <= 5; i++) {
-      const slot = SLOTS[i - 1];
-      const username = parseName(req.query[`u${i}`] || "");
-      const value = req.query[`v${i}`] || "0";
-      const userId = req.query[`id${i}`] || "";
+    for (let i = 0; i < 5; i++) {
+      const slot = SLOTS[i];
+      const { name, value, id } = users[i];
 
       // Avatar
-      const avatarImg = await tryLoadAvatar(userId);
+      const avatarImg = await tryLoadAvatar(id);
       if (avatarImg) {
         drawRoundedAvatar(ctx, avatarImg, slot.avatarX, slot.avatarY, AVATAR_RADIUS);
       } else {
@@ -85,12 +93,12 @@ app.get("/leaderboard", async (req, res) => {
         ctx.lineWidth = 4;
         ctx.stroke();
         ctx.restore();
-        if (username) {
+        if (name) {
           ctx.font = `bold ${AVATAR_RADIUS}px sans-serif`;
           ctx.fillStyle = "#fff";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(username[0].toUpperCase(), slot.avatarX, slot.avatarY);
+          ctx.fillText(name[0].toUpperCase(), slot.avatarX, slot.avatarY);
           ctx.textAlign = "left";
           ctx.textBaseline = "alphabetic";
         }
@@ -103,7 +111,7 @@ app.get("/leaderboard", async (req, res) => {
       ctx.shadowBlur = 8;
       ctx.shadowOffsetX = 2;
       ctx.shadowOffsetY = 2;
-      ctx.fillText(username || "—", slot.textX, slot.textY + 42);
+      ctx.fillText(name || "—", slot.textX, slot.textY + 42);
 
       // Saldo
       ctx.font = "bold 34px sans-serif";
