@@ -5,7 +5,6 @@ const path = require("path");
 const app = express();
 app.use(express.json());
 
-// Posições de cada slot baseadas na imagem 1075x992
 const SLOTS = [
   { avatarX: 223, avatarY: 226, textX: 510, textY: 185 },
   { avatarX: 223, avatarY: 395, textX: 510, textY: 354 },
@@ -24,6 +23,13 @@ function formatNumber(n) {
   return num.toLocaleString("pt-BR");
 }
 
+function parseName(raw) {
+  if (!raw) return "";
+  const idx = raw.lastIndexOf(" - ");
+  if (idx !== -1) return raw.substring(0, idx).trim();
+  return raw.trim();
+}
+
 function drawRoundedAvatar(ctx, img, cx, cy, radius) {
   ctx.save();
   ctx.beginPath();
@@ -39,7 +45,18 @@ function drawRoundedAvatar(ctx, img, cx, cy, radius) {
   ctx.stroke();
 }
 
-// GET /leaderboard?u1=nome&v1=saldo&a1=avatarURL&u2=...&v2=...&a2=...
+async function tryLoadAvatar(userId) {
+  if (!userId) return null;
+  const urls = [
+    `https://cdn.discordapp.com/avatars/${userId}/avatar.png?size=128`,
+    `https://cdn.discordapp.com/embed/avatars/${parseInt(userId) % 5}.png`,
+  ];
+  for (const url of urls) {
+    try { return await loadImage(url); } catch {}
+  }
+  return null;
+}
+
 app.get("/leaderboard", async (req, res) => {
   try {
     const bg = await loadImage(path.join(__dirname, "bg.png"));
@@ -50,22 +67,32 @@ app.get("/leaderboard", async (req, res) => {
 
     for (let i = 1; i <= 5; i++) {
       const slot = SLOTS[i - 1];
-      const username = req.query[`u${i}`] || "";
+      const username = parseName(req.query[`u${i}`] || "");
       const value = req.query[`v${i}`] || "0";
-      const avatarUrl = req.query[`a${i}`] || "";
+      const userId = req.query[`id${i}`] || "";
 
       // Avatar
-      if (avatarUrl) {
-        try {
-          const avatarImg = await loadImage(avatarUrl + "?size=128");
-          drawRoundedAvatar(ctx, avatarImg, slot.avatarX, slot.avatarY, AVATAR_RADIUS);
-        } catch {
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(slot.avatarX, slot.avatarY, AVATAR_RADIUS, 0, Math.PI * 2);
-          ctx.fillStyle = "#666";
-          ctx.fill();
-          ctx.restore();
+      const avatarImg = await tryLoadAvatar(userId);
+      if (avatarImg) {
+        drawRoundedAvatar(ctx, avatarImg, slot.avatarX, slot.avatarY, AVATAR_RADIUS);
+      } else {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(slot.avatarX, slot.avatarY, AVATAR_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = "#444";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.restore();
+        if (username) {
+          ctx.font = `bold ${AVATAR_RADIUS}px sans-serif`;
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(username[0].toUpperCase(), slot.avatarX, slot.avatarY);
+          ctx.textAlign = "left";
+          ctx.textBaseline = "alphabetic";
         }
       }
 
@@ -76,7 +103,7 @@ app.get("/leaderboard", async (req, res) => {
       ctx.shadowBlur = 8;
       ctx.shadowOffsetX = 2;
       ctx.shadowOffsetY = 2;
-      ctx.fillText(username, slot.textX, slot.textY + 42);
+      ctx.fillText(username || "—", slot.textX, slot.textY + 42);
 
       // Saldo
       ctx.font = "bold 34px sans-serif";
